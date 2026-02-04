@@ -106,7 +106,7 @@ public:
         try {
             zenoh::Config zconfig;
             if (!config_.router_ip.empty()) {
-                // zconfig.insert("connect/endpoints", config_.router_ip);
+                zconfig.insert("connect/endpoints", config_.router_ip);
             }
             session_ = zenoh::open(std::move(zconfig));
             return true;

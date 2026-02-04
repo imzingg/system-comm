@@ -7,7 +7,11 @@
 #include <mutex>
 
 namespace zenoh {
-    struct Config {};
+    struct Config {
+        void insert(const std::string& key, const std::string& val) {
+            // Mock insert
+        }
+    };
 
     struct Bytes {
         std::vector<uint8_t> data_;
