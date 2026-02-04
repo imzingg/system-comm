@@ -146,8 +146,6 @@ public:
         fs::path p(remote_path);
         ctx->local_path = fs::path(config_.download_dir) / p.filename();
 
-        // Note: We don't open the file here immediately. We wait for "START" status.
-
         ctx->sub = session_.declare_subscriber(sub_key, [this, req_id](const zenoh::Sample& sample) {
             this->handle_file_response(req_id, sample);
         });
@@ -180,6 +178,13 @@ public:
         } else {
             serving_sub_.reset();
         }
+    }
+
+    void send_file_response(const std::string& requester_id, const std::string& req_id, const std::string& local_path) {
+        // Run in thread to avoid blocking
+        std::thread([this, requester_id, req_id, local_path]() {
+            this->serve_file(requester_id, req_id, fs::path(local_path));
+        }).detach();
     }
 
 private:
@@ -298,10 +303,10 @@ private:
             }
 
             if (fs::exists(requested_path) && fs::is_regular_file(requested_path)) {
-                // Spawn worker thread
-                std::thread([this, requester_id, req_id, requested_path]() {
-                    this->serve_file(requester_id, req_id, requested_path);
-                }).detach();
+                // Serve file using the new internal/external API logic
+                // Pass path directly, as we already verified it.
+                // But wait, send_file_response takes a string.
+                this->send_file_response(requester_id, req_id, requested_path.string());
             } else {
                  send_status(requester_id, req_id, "ERROR");
             }
@@ -345,8 +350,6 @@ private:
             bucket.consume(static_cast<size_t>(bytes_read));
 
             // Publish Chunk - Raw Binary Data
-            // We use the vector<uint8_t> constructor of zenoh::Bytes (or implicit conversion)
-            // Assuming zenoh-cxx API supports this.
             std::vector<uint8_t> chunk_data(bytes_read);
             std::memcpy(chunk_data.data(), buffer.data(), bytes_read);
 
@@ -380,4 +383,8 @@ void ZenohBridge::request_file(const std::string& target_id, const std::string& 
 
 void ZenohBridge::enable_file_serving(bool enable) {
     impl_->enable_file_serving(enable);
+}
+
+void ZenohBridge::send_file_response(const std::string& requester_id, const std::string& req_id, const std::string& local_path) {
+    impl_->send_file_response(requester_id, req_id, local_path);
 }

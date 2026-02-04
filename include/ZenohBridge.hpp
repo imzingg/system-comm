@@ -36,8 +36,14 @@ public:
                       const std::string& remote_path,
                       FileCallback on_complete);
 
-    // Enable this board to serve files when requested
+    // Enable this board to serve files when requested (Automatic Listener)
     void enable_file_serving(bool enable);
+
+    // Manual API to send a file response (Server-side)
+    // Can be used if you want to implement your own request listener
+    void send_file_response(const std::string& requester_id,
+                            const std::string& req_id,
+                            const std::string& local_path);
 
 private:
     class Impl;
