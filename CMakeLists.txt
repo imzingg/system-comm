@@ -25,10 +25,6 @@ find_package(zenohcxx QUIET)
 if (NOT zenohcxx_FOUND)
     message(STATUS "zenohcxx not found, using mock_deps")
     include_directories(mock_deps)
-    # If using mock, we need to link the mock implementation if we want examples to link properly?
-    # Actually, for examples to run in this sandbox (without Zenoh), we need to link mock implementation.
-    # In a real env, we link zenohcxx.
-    # Let's create a target for mock if needed.
 endif()
 
 find_package(nlohmann_json QUIET)
@@ -46,8 +42,11 @@ add_executable(system_comm_test
 target_link_libraries(system_comm_test SystemComm gtest_main pthread)
 
 # Examples
-add_executable(example_pubsub examples/example_pubsub.cpp mock_deps/zenoh_mock.cpp)
-target_link_libraries(example_pubsub SystemComm pthread)
+add_executable(example_publisher examples/example_publisher.cpp mock_deps/zenoh_mock.cpp)
+target_link_libraries(example_publisher SystemComm pthread)
+
+add_executable(example_subscriber examples/example_subscriber.cpp mock_deps/zenoh_mock.cpp)
+target_link_libraries(example_subscriber SystemComm pthread)
 
 add_executable(example_file_transfer examples/example_file_transfer.cpp mock_deps/zenoh_mock.cpp)
 target_link_libraries(example_file_transfer SystemComm pthread)
