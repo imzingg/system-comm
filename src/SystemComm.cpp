@@ -105,6 +105,7 @@ public:
 
         try {
             zenoh::Config zconfig;
+            zconfig.insert("mode", "client");
             std::string endpoint = "tcp/localhost:7447";
             if (!config_.router_ip.empty()) {
                 endpoint = "tcp/" + config_.router_ip + ":7447";
