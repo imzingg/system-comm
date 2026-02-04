@@ -63,7 +63,7 @@ make
 ```cpp
 #include "SystemComm.hpp"
 
-BridgeConfig config;
+SystemCommConfig config;
 config.my_id = "board_A";
 config.router_ip = "192.168.1.101"; // Optional, defaults to multicast
 config.download_dir = "./downloads";

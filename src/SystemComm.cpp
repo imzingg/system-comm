@@ -91,7 +91,7 @@ public:
         }
     }
 
-    bool init(const BridgeConfig& config) {
+    bool init(const SystemCommConfig& config) {
         config_ = config;
 
         try {
@@ -197,7 +197,7 @@ private:
         bool started = false;
     };
 
-    BridgeConfig config_;
+    SystemCommConfig config_;
     zenoh::Session session_;
     std::vector<zenoh::Subscriber> data_subs_;
     std::mutex subs_mutex_;
@@ -365,7 +365,7 @@ private:
 SystemComm::SystemComm() : impl_(std::make_unique<Impl>()) {}
 SystemComm::~SystemComm() = default;
 
-bool SystemComm::init(const BridgeConfig& config) {
+bool SystemComm::init(const SystemCommConfig& config) {
     return impl_->init(config);
 }
 

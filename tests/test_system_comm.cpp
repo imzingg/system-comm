@@ -37,7 +37,7 @@ protected:
         std::filesystem::remove_all(config.download_dir);
     }
 
-    BridgeConfig config;
+    SystemCommConfig config;
 };
 
 TEST_F(SystemCommTest, Initialization) {

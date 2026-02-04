@@ -9,7 +9,7 @@ enum class FileStatus { COMPLETED, ERROR, TIMEOUT };
 using FileCallback = std::function<void(FileStatus status, std::string local_path)>;
 using DataCallback = std::function<void(std::string topic, std::string payload)>;
 
-struct BridgeConfig {
+struct SystemCommConfig {
     std::string my_id;          // e.g., "board_A"
     std::string router_ip;      // Zenoh router IP
     std::string download_dir;   // Directory to save downloaded files
@@ -21,7 +21,7 @@ public:
     SystemComm();
     ~SystemComm();
 
-    bool init(const BridgeConfig& config);
+    bool init(const SystemCommConfig& config);
 
     // 1. Data Plane (Fire-and-forget)
     // Internally maps to key: "sys/{my_id}/data/{topic}"
