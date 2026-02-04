@@ -147,11 +147,6 @@ public:
         ctx->local_path = fs::path(config_.download_dir) / p.filename();
 
         // Note: We don't open the file here immediately. We wait for "START" status.
-        // Or we can open it now. Let's open it now to be ready, or wait for START to be robust.
-        // The detailed plan says "Step 1... Callback... file Write".
-        // Let's stick to opening it when we get 'START' or just before receiving chunks.
-        // Actually, if we open it now, we handle the case where file creation fails early.
-        // But the protocol says Status "START" comes first. Let's wait for START to open.
 
         ctx->sub = session_.declare_subscriber(sub_key, [this, req_id](const zenoh::Sample& sample) {
             this->handle_file_response(req_id, sample);
@@ -249,9 +244,9 @@ private:
             }
         } else if (key.find("/chunk") != std::string::npos) {
             // Handle Chunk
+            // Payload is pure binary data
+
             if (!ctx->started || !ctx->ofs.is_open()) {
-                // Received chunk before START or failed open?
-                // Might happen if ordering isn't guaranteed, but Zenoh reliable usually orders per publisher.
                 // If we missed START, try to open?
                 if (!ctx->started) {
                      ctx->ofs.open(ctx->local_path, std::ios::binary);
@@ -287,15 +282,6 @@ private:
             if (requester_id.empty()) return;
 
             fs::path safe_root(config_.download_dir);
-            // Assuming the remote_path is relative to the safe root?
-            // The prompt says "sys/{board_B}/file/req" is the key.
-            // The logic: provider serves file.
-            // Security: "Ensure provider only serves files from a specific safe directory".
-            // So we join config_.download_dir with path_str?
-            // Or if path_str is absolute, we must reject?
-            // Let's assume we treat path_str as relative to download_dir for safety,
-            // OR we check if the absolute path is within download_dir.
-            // For simplicity and safety, we append and check traversal.
 
             // Check if path is absolute, if so, we might need to be careful.
             // Let's strip leading slashes to force relative.
@@ -358,13 +344,9 @@ private:
 
             bucket.consume(static_cast<size_t>(bytes_read));
 
-            // Publish Chunk
-            // Convert to zenoh::Bytes. zenoh-cxx usually handles raw pointers/vectors?
-            // Depending on version, might need explicit cast.
-            // Using string for safety in this mock if zenoh::Bytes is tricky,
-            // but binary data in string is fine if length handled.
-            // Ideally: session_.put(chunk_key, zenoh::Bytes(buffer.data(), bytes_read));
-            // For now assuming vector<uint8_t> or similar.
+            // Publish Chunk - Raw Binary Data
+            // We use the vector<uint8_t> constructor of zenoh::Bytes (or implicit conversion)
+            // Assuming zenoh-cxx API supports this.
             std::vector<uint8_t> chunk_data(bytes_read);
             std::memcpy(chunk_data.data(), buffer.data(), bytes_read);
 
