@@ -16,10 +16,10 @@ struct BridgeConfig {
     int file_transfer_rate_mbps = 5; // Bandwidth limit (5 MB/s)
 };
 
-class ZenohBridge {
+class SystemComm {
 public:
-    ZenohBridge();
-    ~ZenohBridge();
+    SystemComm();
+    ~SystemComm();
 
     bool init(const BridgeConfig& config);
 

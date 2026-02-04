@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "ZenohBridge.hpp"
+#include "SystemComm.hpp"
 #include <fstream>
 #include <filesystem>
 #include <thread>
@@ -18,7 +18,7 @@ namespace zenoh {
     }
 }
 
-class ZenohBridgeTest : public ::testing::Test {
+class SystemCommTest : public ::testing::Test {
 protected:
     void SetUp() override {
         // Reset mock state before each test
@@ -40,13 +40,13 @@ protected:
     BridgeConfig config;
 };
 
-TEST_F(ZenohBridgeTest, Initialization) {
-    ZenohBridge bridge;
+TEST_F(SystemCommTest, Initialization) {
+    SystemComm bridge;
     EXPECT_TRUE(bridge.init(config));
 }
 
-TEST_F(ZenohBridgeTest, PublishData) {
-    ZenohBridge bridge;
+TEST_F(SystemCommTest, PublishData) {
+    SystemComm bridge;
     bridge.init(config);
 
     std::string topic = "cpu";
@@ -59,8 +59,8 @@ TEST_F(ZenohBridgeTest, PublishData) {
     EXPECT_EQ(puts[0].second, payload);
 }
 
-TEST_F(ZenohBridgeTest, SubscribeData) {
-    ZenohBridge bridge;
+TEST_F(SystemCommTest, SubscribeData) {
+    SystemComm bridge;
     bridge.init(config);
 
     bool callback_called = false;
@@ -81,8 +81,8 @@ TEST_F(ZenohBridgeTest, SubscribeData) {
     EXPECT_EQ(received_payload, "{\"usage\": 90}");
 }
 
-TEST_F(ZenohBridgeTest, RequestFileAndReceive) {
-    ZenohBridge bridge;
+TEST_F(SystemCommTest, RequestFileAndReceive) {
+    SystemComm bridge;
     bridge.init(config);
 
     bool complete = false;
@@ -114,8 +114,8 @@ TEST_F(ZenohBridgeTest, RequestFileAndReceive) {
     // For now, let's assume the mock JSON dump works or we just check key.
 }
 
-TEST_F(ZenohBridgeTest, SendFileResponse) {
-    ZenohBridge bridge;
+TEST_F(SystemCommTest, SendFileResponse) {
+    SystemComm bridge;
     bridge.init(config);
 
     // Create a dummy file to serve

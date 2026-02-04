@@ -1,6 +1,6 @@
-# ZenohBridge
+# SystemComm
 
-ZenohBridge is a high-performance C++ wrapper library for Eclipse Zenoh, designed to simplify telemetry data exchange and asynchronous file transfer between embedded systems.
+SystemComm is a high-performance C++ wrapper library for Eclipse Zenoh, designed to simplify telemetry data exchange and asynchronous file transfer between embedded systems.
 
 ## Features
 
@@ -53,7 +53,7 @@ To build with tests:
 ```bash
 cmake .. -DENABLE_TESTS=ON
 make
-./zenoh_bridge_test
+./system_comm_test
 ```
 
 ## Usage Example
@@ -61,7 +61,7 @@ make
 ### Initialization
 
 ```cpp
-#include "ZenohBridge.hpp"
+#include "SystemComm.hpp"
 
 BridgeConfig config;
 config.my_id = "board_A";
@@ -69,8 +69,8 @@ config.router_ip = "192.168.1.101"; // Optional, defaults to multicast
 config.download_dir = "./downloads";
 config.file_transfer_rate_mbps = 5;
 
-ZenohBridge bridge;
-if (!bridge.init(config)) {
+SystemComm comm;
+if (!comm.init(config)) {
     // Handle error
 }
 ```
@@ -79,10 +79,10 @@ if (!bridge.init(config)) {
 
 ```cpp
 // Publisher
-bridge.publish_data("cpu_usage", "{\"val\": 45.2}");
+comm.publish_data("cpu_usage", "{\"val\": 45.2}");
 
 // Subscriber
-bridge.subscribe_data("cpu_usage", [](std::string topic, std::string payload) {
+comm.subscribe_data("cpu_usage", [](std::string topic, std::string payload) {
     std::cout << "Received on " << topic << ": " << payload << std::endl;
 });
 ```
@@ -91,7 +91,7 @@ bridge.subscribe_data("cpu_usage", [](std::string topic, std::string payload) {
 
 ```cpp
 // Request 'log.txt' from 'board_B'
-bridge.request_file("board_B", "log.txt", [](FileStatus status, std::string path) {
+comm.request_file("board_B", "log.txt", [](FileStatus status, std::string path) {
     if (status == FileStatus::COMPLETED) {
         std::cout << "File downloaded to: " << path << std::endl;
     } else {
@@ -104,7 +104,7 @@ bridge.request_file("board_B", "log.txt", [](FileStatus status, std::string path
 
 ```cpp
 // Enable this board to serve files when requested
-bridge.enable_file_serving(true);
+comm.enable_file_serving(true);
 
 // Files will be served from the 'download_dir' configured in init.
 // The library automatically handles incoming requests safely.
@@ -115,7 +115,7 @@ bridge.enable_file_serving(true);
 If you need to manually trigger a file send (e.g., custom logic):
 
 ```cpp
-bridge.send_file_response("board_A", "req-uuid-1234", "local/path/to/file.bin");
+comm.send_file_response("board_A", "req-uuid-1234", "local/path/to/file.bin");
 ```
 
 ## Configuration

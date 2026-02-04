@@ -1,4 +1,4 @@
-#include "ZenohBridge.hpp"
+#include "SystemComm.hpp"
 #include <zenoh.hxx>
 #include <nlohmann/json.hpp>
 #include <iostream>
@@ -82,7 +82,7 @@ private:
 };
 
 // Impl Class
-class ZenohBridge::Impl {
+class SystemComm::Impl {
 public:
     Impl() = default;
     ~Impl() {
@@ -361,30 +361,30 @@ private:
     }
 };
 
-// ZenohBridge Wrapper Implementation
-ZenohBridge::ZenohBridge() : impl_(std::make_unique<Impl>()) {}
-ZenohBridge::~ZenohBridge() = default;
+// SystemComm Wrapper Implementation
+SystemComm::SystemComm() : impl_(std::make_unique<Impl>()) {}
+SystemComm::~SystemComm() = default;
 
-bool ZenohBridge::init(const BridgeConfig& config) {
+bool SystemComm::init(const BridgeConfig& config) {
     return impl_->init(config);
 }
 
-void ZenohBridge::publish_data(const std::string& topic, const std::string& json_data) {
+void SystemComm::publish_data(const std::string& topic, const std::string& json_data) {
     impl_->publish_data(topic, json_data);
 }
 
-void ZenohBridge::subscribe_data(const std::string& topic, DataCallback cb) {
+void SystemComm::subscribe_data(const std::string& topic, DataCallback cb) {
     impl_->subscribe_data(topic, cb);
 }
 
-void ZenohBridge::request_file(const std::string& target_id, const std::string& remote_path, FileCallback on_complete) {
+void SystemComm::request_file(const std::string& target_id, const std::string& remote_path, FileCallback on_complete) {
     impl_->request_file(target_id, remote_path, on_complete);
 }
 
-void ZenohBridge::enable_file_serving(bool enable) {
+void SystemComm::enable_file_serving(bool enable) {
     impl_->enable_file_serving(enable);
 }
 
-void ZenohBridge::send_file_response(const std::string& requester_id, const std::string& req_id, const std::string& local_path) {
+void SystemComm::send_file_response(const std::string& requester_id, const std::string& req_id, const std::string& local_path) {
     impl_->send_file_response(requester_id, req_id, local_path);
 }

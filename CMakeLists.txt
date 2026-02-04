@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(ZenohBridgeTest)
+project(SystemComm)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -17,11 +17,15 @@ FetchContent_MakeAvailable(googletest)
 include_directories(${CMAKE_SOURCE_DIR}/include)
 include_directories(${CMAKE_SOURCE_DIR}/mock_deps)
 
+# Main Library (if you want to build it separately)
+add_library(SystemComm src/SystemComm.cpp)
+# Link dependencies...
+
 # Test Executable
-add_executable(zenoh_bridge_test
-    tests/test_zenoh_bridge.cpp
-    src/ZenohBridge.cpp
+add_executable(system_comm_test
+    tests/test_system_comm.cpp
+    src/SystemComm.cpp
     mock_deps/zenoh_mock.cpp
 )
 
-target_link_libraries(zenoh_bridge_test gtest_main pthread)
+target_link_libraries(system_comm_test gtest_main pthread)

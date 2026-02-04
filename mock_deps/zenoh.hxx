@@ -33,26 +33,10 @@ namespace zenoh {
         extern std::vector<std::pair<std::string, std::vector<uint8_t>>> byte_puts;
         extern std::vector<std::pair<std::string, std::function<void(const Sample&)>>> subscribers;
 
-        inline void reset() {
-            puts.clear();
-            byte_puts.clear();
-            subscribers.clear();
-        }
-
-        inline std::vector<std::pair<std::string, std::string>> get_puts() { return puts; }
-        inline std::vector<std::pair<std::string, std::vector<uint8_t>>> get_byte_puts() { return byte_puts; }
-
-        inline void inject_subscriber_data(const std::string& k, const std::string& payload) {
-             for(auto& sub : subscribers) {
-                 // Simple wildcard match? Or exact match for now.
-                 // Zenoh wildcards are complex. Let's match if sub key is substring or exact.
-                 // If sub key has '+', we assume regex match needed, but for mock let's just trigger all.
-                 Sample s;
-                 s.key.k = k;
-                 s.payload_data = std::vector<uint8_t>(payload.begin(), payload.end());
-                 sub.second(s);
-             }
-        }
+        void reset();
+        std::vector<std::pair<std::string, std::string>> get_puts();
+        std::vector<std::pair<std::string, std::vector<uint8_t>>> get_byte_puts();
+        void inject_subscriber_data(const std::string& k, const std::string& payload);
     }
 
     class Subscriber {
@@ -63,19 +47,9 @@ namespace zenoh {
     };
 
     struct Session {
-        void put(const std::string& key, const std::string& val) {
-            mock::puts.push_back({key, val});
-        }
-        void put(const std::string& key, const Bytes& bytes) {
-             mock::byte_puts.push_back({key, bytes.data_});
-             // Also store as string for easier debugging if it's text
-             std::string s(bytes.data_.begin(), bytes.data_.end());
-             mock::puts.push_back({key, s});
-        }
-        Subscriber declare_subscriber(const std::string& key, std::function<void(const Sample&)> cb) {
-            mock::subscribers.push_back({key, cb});
-            return Subscriber();
-        }
+        void put(const std::string& key, const std::string& val);
+        void put(const std::string& key, const Bytes& bytes);
+        Subscriber declare_subscriber(const std::string& key, std::function<void(const Sample&)> cb);
         void close() {}
         operator bool() const { return true; }
     };
