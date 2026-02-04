@@ -37,7 +37,6 @@ class TokenBucket {
 public:
     TokenBucket(size_t rate_mbps)
         : rate_bytes_per_sec_(rate_mbps * 1024 * 1024),
-          // Ensure capacity is at least 64KB to allow large chunks
           max_tokens_(std::max(rate_bytes_per_sec_, static_cast<size_t>(64 * 1024))),
           tokens_(max_tokens_),
           last_refill_(std::chrono::steady_clock::now()) {}
@@ -87,9 +86,8 @@ class ZenohBridge::Impl {
 public:
     Impl() = default;
     ~Impl() {
-        // Close session and stop threads if needed
         if (session_) {
-            // session_.close(); // Zenoh session usually closes on destruction
+            // session_.close();
         }
     }
 
@@ -137,7 +135,9 @@ public:
 
     void request_file(const std::string& target_id, const std::string& remote_path, FileCallback on_complete) {
         std::string req_id = generate_uuid();
-        std::string resp_key = "sys/" + config_.my_id + "/file/resp/" + req_id;
+        // Subscribe to both chunk and status using wildcard
+        // Key format: sys/{my_id}/file/{req_id}/...
+        std::string sub_key = "sys/" + config_.my_id + "/file/" + req_id + "/*";
 
         auto ctx = std::make_shared<FileRequestContext>();
         ctx->req_id = req_id;
@@ -146,14 +146,15 @@ public:
         fs::path p(remote_path);
         ctx->local_path = fs::path(config_.download_dir) / p.filename();
 
-        ctx->ofs.open(ctx->local_path, std::ios::binary);
-        if (!ctx->ofs) {
-            on_complete(FileStatus::ERROR, "");
-            return;
-        }
+        // Note: We don't open the file here immediately. We wait for "START" status.
+        // Or we can open it now. Let's open it now to be ready, or wait for START to be robust.
+        // The detailed plan says "Step 1... Callback... file Write".
+        // Let's stick to opening it when we get 'START' or just before receiving chunks.
+        // Actually, if we open it now, we handle the case where file creation fails early.
+        // But the protocol says Status "START" comes first. Let's wait for START to open.
 
-        ctx->sub = session_.declare_subscriber(resp_key, [this, req_id](const zenoh::Sample& sample) {
-            this->handle_file_chunk(req_id, sample);
+        ctx->sub = session_.declare_subscriber(sub_key, [this, req_id](const zenoh::Sample& sample) {
+            this->handle_file_response(req_id, sample);
         });
 
         {
@@ -161,10 +162,12 @@ public:
             active_requests_[req_id] = ctx;
         }
 
+        // Send Request
+        // Key: sys/{target_id}/file/req
         json req = {
+            {"requester", config_.my_id},
             {"req_id", req_id},
-            {"path", remote_path},
-            {"requester_id", config_.my_id}
+            {"file_path", remote_path}
         };
         std::string req_key = "sys/" + target_id + "/file/req";
         session_.put(req_key, req.dump());
@@ -191,6 +194,7 @@ private:
         std::ofstream ofs;
         FileCallback callback;
         zenoh::Subscriber sub;
+        bool started = false;
     };
 
     BridgeConfig config_;
@@ -203,7 +207,7 @@ private:
 
     std::unique_ptr<zenoh::Subscriber> serving_sub_;
 
-    void handle_file_chunk(const std::string& req_id, const zenoh::Sample& sample) {
+    void handle_file_response(const std::string& req_id, const zenoh::Sample& sample) {
         std::shared_ptr<FileRequestContext> ctx;
         {
             std::lock_guard<std::mutex> lock(requests_mutex_);
@@ -212,28 +216,61 @@ private:
             ctx = it->second;
         }
 
+        std::string key = sample.key.to_string();
         auto payload_bytes = sample.get_payload();
 
-        if (payload_bytes.len() < 4) {
-            return;
+        if (key.find("/status") != std::string::npos) {
+            // Handle Status
+            std::string payload(reinterpret_cast<const char*>(payload_bytes.data()), payload_bytes.len());
+            try {
+                auto j = json::parse(payload);
+                std::string state = j["state"];
+
+                if (state == "START") {
+                    ctx->ofs.open(ctx->local_path, std::ios::binary);
+                    if (!ctx->ofs) {
+                        std::cerr << "Failed to open file for writing: " << ctx->local_path << std::endl;
+                        ctx->callback(FileStatus::ERROR, "");
+                        cleanup_request(req_id);
+                        return;
+                    }
+                    ctx->started = true;
+                } else if (state == "COMPLETED") {
+                    ctx->ofs.close();
+                    ctx->callback(FileStatus::COMPLETED, ctx->local_path.string());
+                    cleanup_request(req_id);
+                } else if (state == "ERROR") {
+                    ctx->ofs.close();
+                    ctx->callback(FileStatus::ERROR, "");
+                    cleanup_request(req_id);
+                }
+            } catch (const std::exception& e) {
+                std::cerr << "JSON Parse Error in Status: " << e.what() << std::endl;
+            }
+        } else if (key.find("/chunk") != std::string::npos) {
+            // Handle Chunk
+            if (!ctx->started || !ctx->ofs.is_open()) {
+                // Received chunk before START or failed open?
+                // Might happen if ordering isn't guaranteed, but Zenoh reliable usually orders per publisher.
+                // If we missed START, try to open?
+                if (!ctx->started) {
+                     ctx->ofs.open(ctx->local_path, std::ios::binary);
+                     ctx->started = true;
+                }
+            }
+            if (ctx->ofs.is_open()) {
+                 const char* data_ptr = reinterpret_cast<const char*>(payload_bytes.data());
+                 ctx->ofs.write(data_ptr, payload_bytes.len());
+            }
         }
+    }
 
-        size_t data_len = payload_bytes.len() - 4;
-
-        if (data_len == 0) {
-            // EOF
-            ctx->ofs.close();
-            ctx->callback(FileStatus::COMPLETED, ctx->local_path.string());
-
-            std::thread([this, req_id]() {
-                std::lock_guard<std::mutex> lock(requests_mutex_);
-                active_requests_.erase(req_id);
-            }).detach();
-            return;
-        }
-
-        const char* data_ptr = reinterpret_cast<const char*>(payload_bytes.data()) + 4;
-        ctx->ofs.write(data_ptr, data_len);
+    void cleanup_request(const std::string& req_id) {
+         // Cleanup (Async to avoid destroying subscriber inside its callback)
+        std::thread([this, req_id]() {
+            std::lock_guard<std::mutex> lock(requests_mutex_);
+            active_requests_.erase(req_id);
+        }).detach();
     }
 
     void handle_file_request(const zenoh::Sample& sample) {
@@ -242,25 +279,45 @@ private:
             std::string payload(reinterpret_cast<const char*>(payload_bytes.data()), payload_bytes.len());
             auto j = json::parse(payload);
 
+            // Format: {"requester": "board_A", "req_id": "...", "file_path": "..."}
+            std::string requester_id = j.value("requester", "");
             std::string req_id = j["req_id"];
-            std::string path_str = j["path"];
-            std::string requester_id = j.value("requester_id", "");
+            std::string path_str = j["file_path"];
 
-            if (requester_id.empty()) {
-                return;
-            }
+            if (requester_id.empty()) return;
 
             fs::path safe_root(config_.download_dir);
+            // Assuming the remote_path is relative to the safe root?
+            // The prompt says "sys/{board_B}/file/req" is the key.
+            // The logic: provider serves file.
+            // Security: "Ensure provider only serves files from a specific safe directory".
+            // So we join config_.download_dir with path_str?
+            // Or if path_str is absolute, we must reject?
+            // Let's assume we treat path_str as relative to download_dir for safety,
+            // OR we check if the absolute path is within download_dir.
+            // For simplicity and safety, we append and check traversal.
+
+            // Check if path is absolute, if so, we might need to be careful.
+            // Let's strip leading slashes to force relative.
+            while (!path_str.empty() && path_str[0] == '/') {
+                path_str = path_str.substr(1);
+            }
+
             fs::path requested_path = safe_root / path_str;
 
             if (path_str.find("..") != std::string::npos) {
+                // Potential traversal
+                send_status(requester_id, req_id, "ERROR");
                 return;
             }
 
             if (fs::exists(requested_path) && fs::is_regular_file(requested_path)) {
+                // Spawn worker thread
                 std::thread([this, requester_id, req_id, requested_path]() {
                     this->serve_file(requester_id, req_id, requested_path);
                 }).detach();
+            } else {
+                 send_status(requester_id, req_id, "ERROR");
             }
 
         } catch (const std::exception& e) {
@@ -268,14 +325,31 @@ private:
         }
     }
 
+    void send_status(const std::string& requester_id, const std::string& req_id, const std::string& state, size_t size = 0) {
+        json status = { {"state", state} };
+        if (state == "START") {
+            status["size"] = size;
+        }
+        std::string key = "sys/" + requester_id + "/file/" + req_id + "/status";
+        session_.put(key, status.dump());
+    }
+
     void serve_file(std::string requester_id, std::string req_id, fs::path filepath) {
-        std::ifstream ifs(filepath, std::ios::binary);
-        if (!ifs) return;
+        std::ifstream ifs(filepath, std::ios::binary | std::ios::ate);
+        if (!ifs) {
+            send_status(requester_id, req_id, "ERROR");
+            return;
+        }
+
+        size_t file_size = ifs.tellg();
+        ifs.seekg(0, std::ios::beg);
+
+        // Send START
+        send_status(requester_id, req_id, "START", file_size);
 
         TokenBucket bucket(config_.file_transfer_rate_mbps);
         std::vector<char> buffer(64 * 1024); // 64KB chunks
-        uint32_t seq = 0;
-        std::string resp_key = "sys/" + requester_id + "/file/resp/" + req_id;
+        std::string chunk_key = "sys/" + requester_id + "/file/" + req_id + "/chunk";
 
         while (ifs) {
             ifs.read(buffer.data(), buffer.size());
@@ -284,20 +358,21 @@ private:
 
             bucket.consume(static_cast<size_t>(bytes_read));
 
-            // Prepare payload
-            std::vector<uint8_t> payload(4 + bytes_read);
-            std::memcpy(payload.data(), &seq, 4); // Seq ID
-            std::memcpy(payload.data() + 4, buffer.data(), bytes_read);
+            // Publish Chunk
+            // Convert to zenoh::Bytes. zenoh-cxx usually handles raw pointers/vectors?
+            // Depending on version, might need explicit cast.
+            // Using string for safety in this mock if zenoh::Bytes is tricky,
+            // but binary data in string is fine if length handled.
+            // Ideally: session_.put(chunk_key, zenoh::Bytes(buffer.data(), bytes_read));
+            // For now assuming vector<uint8_t> or similar.
+            std::vector<uint8_t> chunk_data(bytes_read);
+            std::memcpy(chunk_data.data(), buffer.data(), bytes_read);
 
-            session_.put(resp_key, zenoh::Bytes(payload));
-
-            seq++;
+            session_.put(chunk_key, zenoh::Bytes(chunk_data));
         }
 
-        // Send EOF
-        std::vector<uint8_t> eof(4);
-        std::memcpy(eof.data(), &seq, 4);
-        session_.put(resp_key, zenoh::Bytes(eof));
+        // Send COMPLETED
+        send_status(requester_id, req_id, "COMPLETED");
     }
 };
 

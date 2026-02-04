@@ -8,16 +8,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include_directories(include)
 
 # Find dependencies
-# Note: These package names are hypothetical as per prompt assumptions.
-# Adjust find_package names according to actual installed package names (e.g. zenoh-cxx, nlohmann_json)
 find_package(zenohcxx QUIET)
 if (NOT zenohcxx_FOUND)
-    message(STATUS "zenohcxx not found, assuming standard include paths or mocked environment")
+    message(STATUS "zenohcxx not found, assuming standard include paths")
 endif()
 
 find_package(nlohmann_json QUIET)
 if (NOT nlohmann_json_FOUND)
-    message(STATUS "nlohmann_json not found, assuming standard include paths or mocked environment")
+    message(STATUS "nlohmann_json not found, assuming standard include paths")
 endif()
 
 # Define library
