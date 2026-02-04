@@ -105,9 +105,11 @@ public:
 
         try {
             zenoh::Config zconfig;
+            std::string endpoint = "tcp/localhost:7447";
             if (!config_.router_ip.empty()) {
-                zconfig.insert("connect/endpoints", config_.router_ip);
+                endpoint = "tcp/" + config_.router_ip + ":7447";
             }
+            zconfig.insert("connect/endpoints", endpoint);
             session_ = zenoh::open(std::move(zconfig));
             return true;
         } catch (const std::exception& e) {
